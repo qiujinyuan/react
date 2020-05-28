@@ -294,6 +294,7 @@ export function render(
     'Target container is not a DOM element.',
   );
   if (__DEV__) {
+    // QUESTION: 已经被 createRoot 绑定过的 container 不能再与 render 绑定，是在什么时候绑定的？？？
     const isModernRoot =
       isContainerMarkedAsRoot(container) &&
       container._reactRootContainer === undefined;
