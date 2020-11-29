@@ -22,7 +22,7 @@ describe('ReactHooksInspectionIntegration', () => {
     React = require('react');
     ReactTestRenderer = require('react-test-renderer');
     Scheduler = require('scheduler');
-    act = ReactTestRenderer.act;
+    act = ReactTestRenderer.unstable_concurrentAct;
     ReactDebugTools = require('react-debug-tools');
   });
 
@@ -366,121 +366,123 @@ describe('ReactHooksInspectionIntegration', () => {
     ]);
   });
 
-  if (__EXPERIMENTAL__) {
-    it('should support composite useTransition hook', () => {
-      function Foo(props) {
-        React.useTransition();
-        const memoizedValue = React.useMemo(() => 'hello', []);
-        return <div>{memoizedValue}</div>;
-      }
-      const renderer = ReactTestRenderer.create(<Foo />);
-      const childFiber = renderer.root.findByType(Foo)._currentFiber();
-      const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
-      expect(tree).toEqual([
-        {
-          id: 0,
-          isStateEditable: false,
-          name: 'Transition',
-          value: undefined,
-          subHooks: [],
-        },
-        {
-          id: 1,
-          isStateEditable: false,
-          name: 'Memo',
-          value: 'hello',
-          subHooks: [],
-        },
-      ]);
-    });
+  // @gate experimental
+  it('should support composite useTransition hook', () => {
+    function Foo(props) {
+      React.unstable_useTransition();
+      const memoizedValue = React.useMemo(() => 'hello', []);
+      return <div>{memoizedValue}</div>;
+    }
+    const renderer = ReactTestRenderer.create(<Foo />);
+    const childFiber = renderer.root.findByType(Foo)._currentFiber();
+    const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
+    expect(tree).toEqual([
+      {
+        id: 0,
+        isStateEditable: false,
+        name: 'Transition',
+        value: undefined,
+        subHooks: [],
+      },
+      {
+        id: 1,
+        isStateEditable: false,
+        name: 'Memo',
+        value: 'hello',
+        subHooks: [],
+      },
+    ]);
+  });
 
-    it('should support composite useDeferredValue hook', () => {
-      function Foo(props) {
-        React.useDeferredValue('abc', {
-          timeoutMs: 500,
-        });
-        const [state] = React.useState(() => 'hello', []);
-        return <div>{state}</div>;
-      }
-      const renderer = ReactTestRenderer.create(<Foo />);
-      const childFiber = renderer.root.findByType(Foo)._currentFiber();
-      const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
-      expect(tree).toEqual([
-        {
-          id: 0,
-          isStateEditable: false,
-          name: 'DeferredValue',
-          value: 'abc',
-          subHooks: [],
-        },
-        {
-          id: 1,
-          isStateEditable: true,
-          name: 'State',
-          value: 'hello',
-          subHooks: [],
-        },
-      ]);
-    });
-
-    it('should support composite useOpaqueIdentifier hook', () => {
-      function Foo(props) {
-        const id = React.unstable_useOpaqueIdentifier();
-        const [state] = React.useState(() => 'hello', []);
-        return <div id={id}>{state}</div>;
-      }
-
-      const renderer = ReactTestRenderer.create(<Foo />);
-      const childFiber = renderer.root.findByType(Foo)._currentFiber();
-      const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
-
-      expect(tree.length).toEqual(2);
-
-      expect(tree[0].id).toEqual(0);
-      expect(tree[0].isStateEditable).toEqual(false);
-      expect(tree[0].name).toEqual('OpaqueIdentifier');
-      expect((tree[0].value + '').startsWith('c_')).toBe(true);
-
-      expect(tree[1]).toEqual({
+  // @gate experimental
+  it('should support composite useDeferredValue hook', () => {
+    function Foo(props) {
+      React.unstable_useDeferredValue('abc', {
+        timeoutMs: 500,
+      });
+      const [state] = React.useState(() => 'hello', []);
+      return <div>{state}</div>;
+    }
+    const renderer = ReactTestRenderer.create(<Foo />);
+    const childFiber = renderer.root.findByType(Foo)._currentFiber();
+    const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
+    expect(tree).toEqual([
+      {
+        id: 0,
+        isStateEditable: false,
+        name: 'DeferredValue',
+        value: 'abc',
+        subHooks: [],
+      },
+      {
         id: 1,
         isStateEditable: true,
         name: 'State',
         value: 'hello',
         subHooks: [],
-      });
+      },
+    ]);
+  });
+
+  // @gate experimental
+  it('should support composite useOpaqueIdentifier hook', () => {
+    function Foo(props) {
+      const id = React.unstable_useOpaqueIdentifier();
+      const [state] = React.useState(() => 'hello', []);
+      return <div id={id}>{state}</div>;
+    }
+
+    const renderer = ReactTestRenderer.create(<Foo />);
+    const childFiber = renderer.root.findByType(Foo)._currentFiber();
+    const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
+
+    expect(tree.length).toEqual(2);
+
+    expect(tree[0].id).toEqual(0);
+    expect(tree[0].isStateEditable).toEqual(false);
+    expect(tree[0].name).toEqual('OpaqueIdentifier');
+    expect((tree[0].value + '').startsWith('c_')).toBe(true);
+
+    expect(tree[1]).toEqual({
+      id: 1,
+      isStateEditable: true,
+      name: 'State',
+      value: 'hello',
+      subHooks: [],
     });
+  });
 
-    it('should support composite useOpaqueIdentifier hook in concurrent mode', () => {
-      function Foo(props) {
-        const id = React.unstable_useOpaqueIdentifier();
-        const [state] = React.useState(() => 'hello', []);
-        return <div id={id}>{state}</div>;
-      }
+  // @gate experimental
+  it('should support composite useOpaqueIdentifier hook in concurrent mode', () => {
+    function Foo(props) {
+      const id = React.unstable_useOpaqueIdentifier();
+      const [state] = React.useState(() => 'hello', []);
+      return <div id={id}>{state}</div>;
+    }
 
-      const renderer = ReactTestRenderer.create(<Foo />, {
-        unstable_isConcurrent: true,
-      });
-      expect(Scheduler).toFlushWithoutYielding();
-
-      const childFiber = renderer.root.findByType(Foo)._currentFiber();
-      const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
-
-      expect(tree.length).toEqual(2);
-
-      expect(tree[0].id).toEqual(0);
-      expect(tree[0].isStateEditable).toEqual(false);
-      expect(tree[0].name).toEqual('OpaqueIdentifier');
-      expect((tree[0].value + '').startsWith('c_')).toBe(true);
-
-      expect(tree[1]).toEqual({
-        id: 1,
-        isStateEditable: true,
-        name: 'State',
-        value: 'hello',
-        subHooks: [],
-      });
+    const renderer = ReactTestRenderer.create(<Foo />, {
+      unstable_isConcurrent: true,
     });
-  }
+    expect(Scheduler).toFlushWithoutYielding();
+
+    const childFiber = renderer.root.findByType(Foo)._currentFiber();
+    const tree = ReactDebugTools.inspectHooksOfFiber(childFiber);
+
+    expect(tree.length).toEqual(2);
+
+    expect(tree[0].id).toEqual(0);
+    expect(tree[0].isStateEditable).toEqual(false);
+    expect(tree[0].name).toEqual('OpaqueIdentifier');
+    expect((tree[0].value + '').startsWith('c_')).toBe(true);
+
+    expect(tree[1]).toEqual({
+      id: 1,
+      isStateEditable: true,
+      name: 'State',
+      value: 'hello',
+      subHooks: [],
+    });
+  });
 
   describe('useDebugValue', () => {
     it('should support inspectable values for multiple custom hooks', () => {
@@ -785,7 +787,7 @@ describe('ReactHooksInspectionIntegration', () => {
         '1. You might have mismatching versions of React and the renderer (such as React DOM)\n' +
         '2. You might be breaking the Rules of Hooks\n' +
         '3. You might have more than one copy of React in the same app\n' +
-        'See https://fb.me/react-invalid-hook-call for tips about how to debug and fix this problem.',
+        'See https://reactjs.org/link/invalid-hook-call for tips about how to debug and fix this problem.',
     );
 
     expect(getterCalls).toBe(1);
@@ -795,7 +797,7 @@ describe('ReactHooksInspectionIntegration', () => {
   });
 
   // This test case is based on an open source bug report:
-  // facebookincubator/redux-react-hook/issues/34#issuecomment-466693787
+  // https://github.com/facebookincubator/redux-react-hook/issues/34#issuecomment-466693787
   it('should properly advance the current hook for useContext', () => {
     const MyContext = React.createContext(1);
 
@@ -846,9 +848,9 @@ describe('ReactHooksInspectionIntegration', () => {
 
   if (__EXPERIMENTAL__) {
     it('should support composite useMutableSource hook', () => {
-      const mutableSource = React.createMutableSource({}, () => 1);
+      const mutableSource = React.unstable_createMutableSource({}, () => 1);
       function Foo(props) {
-        React.useMutableSource(
+        React.unstable_useMutableSource(
           mutableSource,
           () => 'snapshot',
           () => {},

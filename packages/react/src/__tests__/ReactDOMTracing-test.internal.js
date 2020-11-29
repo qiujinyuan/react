@@ -16,12 +16,18 @@ let ReactFeatureFlags;
 let Scheduler;
 let SchedulerTracing;
 let TestUtils;
+let act;
 let onInteractionScheduledWorkCompleted;
 let onInteractionTraced;
 let onWorkCanceled;
 let onWorkScheduled;
 let onWorkStarted;
 let onWorkStopped;
+
+// Copied from ReactFiberLanes. Don't do this!
+// This is hard coded directly to avoid needing to import, and
+// we'll remove this as we replace runWithPriority with React APIs.
+const IdleLanePriority = 2;
 
 function loadModules() {
   ReactFeatureFlags = require('shared/ReactFeatureFlags');
@@ -36,6 +42,8 @@ function loadModules() {
   Scheduler = require('scheduler');
   SchedulerTracing = require('scheduler/tracing');
   TestUtils = require('react-dom/test-utils');
+
+  act = TestUtils.unstable_concurrentAct;
 
   onInteractionScheduledWorkCompleted = jest.fn();
   onInteractionTraced = jest.fn();
@@ -53,6 +61,19 @@ function loadModules() {
     onWorkStarted,
     onWorkStopped,
   });
+}
+
+// Note: This is based on a similar component we use in www. We can delete once
+// the extra div wrapper is no longer necessary.
+function LegacyHiddenDiv({children, mode}) {
+  return (
+    <div hidden={mode === 'hidden'}>
+      <React.unstable_LegacyHidden
+        mode={mode === 'hidden' ? 'unstable-defer-without-hiding' : mode}>
+        {children}
+      </React.unstable_LegacyHidden>
+    </div>
+  );
 }
 
 describe('ReactDOMTracing', () => {
@@ -86,9 +107,9 @@ describe('ReactDOMTracing', () => {
             Scheduler.unstable_yieldValue('App:mount');
           }, []);
           return (
-            <div hidden={true}>
+            <LegacyHiddenDiv mode="hidden">
               <Child />
-            </div>
+            </LegacyHiddenDiv>
           );
         };
 
@@ -100,7 +121,7 @@ describe('ReactDOMTracing', () => {
         const root = ReactDOM.createRoot(container);
         SchedulerTracing.unstable_trace('initialization', 0, () => {
           interaction = Array.from(SchedulerTracing.unstable_getCurrent())[0];
-          TestUtils.act(() => {
+          act(() => {
             root.render(
               <React.Profiler id="test" onRender={onRender}>
                 <App />
@@ -130,12 +151,17 @@ describe('ReactDOMTracing', () => {
         expect(
           onInteractionScheduledWorkCompleted,
         ).toHaveBeenLastNotifiedOfInteraction(interaction);
-        // TODO: This is 4 instead of 3 because this update was scheduled at
-        // idle priority, and idle updates are slightly higher priority than
-        // offscreen work. So it takes two render passes to finish it. Profiler
-        // calls `onRender` for the first render even though everything
-        // bails out.
-        expect(onRender).toHaveBeenCalledTimes(4);
+
+        if (gate(flags => flags.dfsEffectsRefactor)) {
+          expect(onRender).toHaveBeenCalledTimes(3);
+        } else {
+          // TODO: This is 4 instead of 3 because this update was scheduled at
+          // idle priority, and idle updates are slightly higher priority than
+          // offscreen work. So it takes two render passes to finish it. Profiler
+          // calls `onRender` for the first render even though everything
+          // bails out.
+          expect(onRender).toHaveBeenCalledTimes(4);
+        }
         expect(onRender).toHaveLastRenderedWithInteractions(
           new Set([interaction]),
         );
@@ -157,9 +183,9 @@ describe('ReactDOMTracing', () => {
             Scheduler.unstable_yieldValue('App:mount');
           }, []);
           return (
-            <div hidden={true}>
+            <LegacyHiddenDiv mode="hidden">
               <Child />
-            </div>
+            </LegacyHiddenDiv>
           );
         };
 
@@ -172,7 +198,7 @@ describe('ReactDOMTracing', () => {
         SchedulerTracing.unstable_trace('initialization', 0, () => {
           interaction = Array.from(SchedulerTracing.unstable_getCurrent())[0];
 
-          TestUtils.act(() => {
+          act(() => {
             root.render(
               <React.Profiler id="test" onRender={onRender}>
                 <App />
@@ -219,9 +245,12 @@ describe('ReactDOMTracing', () => {
               Scheduler.unstable_yieldValue('Child:update');
             } else {
               Scheduler.unstable_yieldValue('Child:mount');
-              Scheduler.unstable_runWithPriority(
-                Scheduler.unstable_IdlePriority,
-                () => setDidMount(true),
+              // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+              ReactDOM.unstable_runWithPriority(IdleLanePriority, () =>
+                Scheduler.unstable_runWithPriority(
+                  Scheduler.unstable_IdlePriority,
+                  () => setDidMount(true),
+                ),
               );
             }
           }, [didMount]);
@@ -234,9 +263,9 @@ describe('ReactDOMTracing', () => {
             Scheduler.unstable_yieldValue('App:mount');
           }, []);
           return (
-            <div hidden={true}>
+            <LegacyHiddenDiv mode="hidden">
               <Child />
-            </div>
+            </LegacyHiddenDiv>
           );
         };
 
@@ -248,7 +277,7 @@ describe('ReactDOMTracing', () => {
         const root = ReactDOM.createRoot(container);
         SchedulerTracing.unstable_trace('initialization', 0, () => {
           interaction = Array.from(SchedulerTracing.unstable_getCurrent())[0];
-          TestUtils.act(() => {
+          act(() => {
             root.render(
               <React.Profiler id="test" onRender={onRender}>
                 <App />
@@ -281,12 +310,16 @@ describe('ReactDOMTracing', () => {
         expect(
           onInteractionScheduledWorkCompleted,
         ).toHaveBeenLastNotifiedOfInteraction(interaction);
-        // TODO: This is 4 instead of 3 because this update was scheduled at
-        // idle priority, and idle updates are slightly higher priority than
-        // offscreen work. So it takes two render passes to finish it. Profiler
-        // calls `onRender` for the first render even though everything
-        // bails out.
-        expect(onRender).toHaveBeenCalledTimes(4);
+        if (gate(flags => flags.dfsEffectsRefactor)) {
+          expect(onRender).toHaveBeenCalledTimes(3);
+        } else {
+          // TODO: This is 4 instead of 3 because this update was scheduled at
+          // idle priority, and idle updates are slightly higher priority than
+          // offscreen work. So it takes two render passes to finish it. Profiler
+          // calls `onRender` for the first render even though everything
+          // bails out.
+          expect(onRender).toHaveBeenCalledTimes(4);
+        }
         expect(onRender).toHaveLastRenderedWithInteractions(
           new Set([interaction]),
         );
@@ -304,9 +337,9 @@ describe('ReactDOMTracing', () => {
         const WithHiddenWork = () => {
           Scheduler.unstable_yieldValue('WithHiddenWork');
           return (
-            <div hidden={true}>
+            <LegacyHiddenDiv mode="hidden">
               <Child />
-            </div>
+            </LegacyHiddenDiv>
           );
         };
 
@@ -343,7 +376,7 @@ describe('ReactDOMTracing', () => {
         const root = ReactDOM.createRoot(container);
 
         // Schedule some idle work without any interactions.
-        TestUtils.act(() => {
+        act(() => {
           root.render(
             <React.Profiler id="test" onRender={onRender}>
               <App />
@@ -411,9 +444,9 @@ describe('ReactDOMTracing', () => {
             Scheduler.unstable_yieldValue('MaybeHiddenWork:effect');
           });
           return flag ? (
-            <div hidden={true}>
+            <LegacyHiddenDiv mode="hidden">
               <Child />
-            </div>
+            </LegacyHiddenDiv>
           ) : null;
         };
 
@@ -447,7 +480,7 @@ describe('ReactDOMTracing', () => {
         const container = document.createElement('div');
         const root = ReactDOM.createRoot(container);
 
-        TestUtils.act(() => {
+        act(() => {
           root.render(
             <React.Profiler id="test" onRender={onRender}>
               <App />
@@ -547,7 +580,7 @@ describe('ReactDOMTracing', () => {
 
         let interaction;
 
-        TestUtils.act(() => {
+        act(() => {
           SchedulerTracing.unstable_trace('initialization', 0, () => {
             interaction = Array.from(SchedulerTracing.unstable_getCurrent())[0];
             // This render is only CPU bound. Nothing suspends.
@@ -709,6 +742,76 @@ describe('ReactDOMTracing', () => {
         suspend = false;
         resolve();
         await promise;
+        Scheduler.unstable_flushAll();
+        jest.runAllTimers();
+
+        expect(ref.current).not.toBe(null);
+        expect(onInteractionScheduledWorkCompleted).toHaveBeenCalledTimes(1);
+        expect(
+          onInteractionScheduledWorkCompleted,
+        ).toHaveBeenLastNotifiedOfInteraction(interaction);
+      });
+
+      // @gate experimental
+      it('traces interaction across suspended hydration from server', async () => {
+        // Copied from ReactDOMHostConfig.js
+        const SUSPENSE_START_DATA = '$';
+        const SUSPENSE_PENDING_START_DATA = '$?';
+
+        const ref = React.createRef();
+
+        function App() {
+          return (
+            <React.Suspense fallback="Loading...">
+              <span ref={ref}>Hello</span>
+            </React.Suspense>
+          );
+        }
+
+        const container = document.createElement('div');
+
+        // Render the final HTML.
+        const finalHTML = ReactDOMServer.renderToString(<App />);
+
+        // Replace the marker with a pending state.
+        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
+        const escapedMarker = SUSPENSE_START_DATA.replace(
+          /[.*+\-?^${}()|[\]\\]/g,
+          '\\$&',
+        );
+        container.innerHTML = finalHTML.replace(
+          new RegExp(escapedMarker, 'g'),
+          SUSPENSE_PENDING_START_DATA,
+        );
+
+        let interaction;
+
+        const root = ReactDOM.createRoot(container, {hydrate: true});
+
+        // Start hydrating but simulate blocking for suspense data from the server.
+        SchedulerTracing.unstable_trace('initialization', 0, () => {
+          interaction = Array.from(SchedulerTracing.unstable_getCurrent())[0];
+
+          root.render(<App />);
+        });
+        Scheduler.unstable_flushAll();
+        jest.runAllTimers();
+
+        expect(ref.current).toBe(null);
+        expect(onInteractionTraced).toHaveBeenCalledTimes(1);
+        expect(onInteractionTraced).toHaveBeenLastNotifiedOfInteraction(
+          interaction,
+        );
+        expect(onInteractionScheduledWorkCompleted).not.toHaveBeenCalled();
+
+        // Unblock rendering, pretend the content is injected by the server.
+        const startNode = container.childNodes[0];
+        expect(startNode).not.toBe(null);
+        expect(startNode.nodeType).toBe(Node.COMMENT_NODE);
+
+        startNode.textContent = SUSPENSE_START_DATA;
+        startNode._reactRetry();
+
         Scheduler.unstable_flushAll();
         jest.runAllTimers();
 

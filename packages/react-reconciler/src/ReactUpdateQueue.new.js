@@ -85,27 +85,19 @@
 // resources, but the final state is always the same.
 
 import type {Fiber} from './ReactInternalTypes';
-import type {ExpirationTimeOpaque} from './ReactFiberExpirationTime.new';
-import type {SuspenseConfig} from './ReactFiberSuspenseConfig';
+import type {Lanes, Lane} from './ReactFiberLane';
 
-import {
-  NoWork,
-  Sync,
-  isSameOrHigherPriority,
-} from './ReactFiberExpirationTime.new';
+import {NoLane, NoLanes, isSubsetOfLanes, mergeLanes} from './ReactFiberLane';
 import {
   enterDisallowedContextReadInDEV,
   exitDisallowedContextReadInDEV,
 } from './ReactFiberNewContext.new';
-import {Callback, ShouldCapture, DidCapture} from './ReactSideEffectTags';
+import {Callback, ShouldCapture, DidCapture} from './ReactFiberFlags';
 
 import {debugRenderPhaseSideEffectsForStrictMode} from 'shared/ReactFeatureFlags';
 
 import {StrictMode} from './ReactTypeOfMode';
-import {
-  markRenderEventTimeAndConfig,
-  markUnprocessedUpdateTime,
-} from './ReactFiberWorkLoop.new';
+import {markSkippedUpdateLanes} from './ReactFiberWorkLoop.new';
 
 import invariant from 'shared/invariant';
 
@@ -115,8 +107,7 @@ export type Update<State> = {|
   // TODO: Temporary field. Will remove this by storing a map of
   // transition -> event time on the root.
   eventTime: number,
-  expirationTime: ExpirationTimeOpaque,
-  suspenseConfig: null | SuspenseConfig,
+  lane: Lane,
 
   tag: 0 | 1 | 2 | 3,
   payload: any,
@@ -190,15 +181,10 @@ export function cloneUpdateQueue<State>(
   }
 }
 
-export function createUpdate(
-  eventTime: number,
-  expirationTime: ExpirationTimeOpaque,
-  suspenseConfig: null | SuspenseConfig,
-): Update<*> {
+export function createUpdate(eventTime: number, lane: Lane): Update<*> {
   const update: Update<*> = {
     eventTime,
-    expirationTime,
-    suspenseConfig,
+    lane,
 
     tag: UpdateState,
     payload: null,
@@ -272,8 +258,7 @@ export function enqueueCapturedUpdate<State>(
         do {
           const clone: Update<State> = {
             eventTime: update.eventTime,
-            expirationTime: update.expirationTime,
-            suspenseConfig: update.suspenseConfig,
+            lane: update.lane,
 
             tag: update.tag,
             payload: update.payload,
@@ -360,8 +345,8 @@ function getStateFromUpdate<State>(
       return payload;
     }
     case CaptureUpdate: {
-      workInProgress.effectTag =
-        (workInProgress.effectTag & ~ShouldCapture) | DidCapture;
+      workInProgress.flags =
+        (workInProgress.flags & ~ShouldCapture) | DidCapture;
     }
     // Intentional fallthrough
     case UpdateState: {
@@ -410,7 +395,7 @@ export function processUpdateQueue<State>(
   workInProgress: Fiber,
   props: any,
   instance: any,
-  renderExpirationTime: ExpirationTimeOpaque,
+  renderLanes: Lanes,
 ): void {
   // This is always non-null on a ClassComponent or HostRoot
   const queue: UpdateQueue<State> = (workInProgress.updateQueue: any);
@@ -467,7 +452,9 @@ export function processUpdateQueue<State>(
   if (firstBaseUpdate !== null) {
     // Iterate through the list of updates to compute the result.
     let newState = queue.baseState;
-    let newExpirationTime = NoWork;
+    // TODO: Don't need to accumulate this. Instead, we can remove renderLanes
+    // from the original lanes.
+    let newLanes = NoLanes;
 
     let newBaseState = null;
     let newFirstBaseUpdate = null;
@@ -475,16 +462,15 @@ export function processUpdateQueue<State>(
 
     let update = firstBaseUpdate;
     do {
+      const updateLane = update.lane;
       const updateEventTime = update.eventTime;
-      const updateExpirationTime = update.expirationTime;
-      if (!isSameOrHigherPriority(updateExpirationTime, renderExpirationTime)) {
+      if (!isSubsetOfLanes(renderLanes, updateLane)) {
         // Priority is insufficient. Skip this update. If this is the first
         // skipped update, the previous update/state is the new base
         // update/state.
         const clone: Update<State> = {
           eventTime: updateEventTime,
-          expirationTime: updateExpirationTime,
-          suspenseConfig: update.suspenseConfig,
+          lane: updateLane,
 
           tag: update.tag,
           payload: update.payload,
@@ -499,17 +485,17 @@ export function processUpdateQueue<State>(
           newLastBaseUpdate = newLastBaseUpdate.next = clone;
         }
         // Update the remaining priority in the queue.
-        if (!isSameOrHigherPriority(newExpirationTime, updateExpirationTime)) {
-          newExpirationTime = updateExpirationTime;
-        }
+        newLanes = mergeLanes(newLanes, updateLane);
       } else {
         // This update does have sufficient priority.
 
         if (newLastBaseUpdate !== null) {
           const clone: Update<State> = {
             eventTime: updateEventTime,
-            expirationTime: Sync, // This update is going to be committed so we never want uncommit it.
-            suspenseConfig: update.suspenseConfig,
+            // This update is going to be committed so we never want uncommit
+            // it. Using NoLane works because 0 is a subset of all bitmasks, so
+            // this will never be skipped by the check above.
+            lane: NoLane,
 
             tag: update.tag,
             payload: update.payload,
@@ -519,14 +505,6 @@ export function processUpdateQueue<State>(
           };
           newLastBaseUpdate = newLastBaseUpdate.next = clone;
         }
-
-        // Mark the event time of this update as relevant to this render pass.
-        // TODO: This should ideally use the true event time of this update rather than
-        // its priority which is a derived and not reverseable value.
-        // TODO: We should skip this update if it was already committed but currently
-        // we have no way of detecting the difference between a committed and suspended
-        // update here.
-        markRenderEventTimeAndConfig(updateEventTime, update.suspenseConfig);
 
         // Process this update.
         newState = getStateFromUpdate(
@@ -539,7 +517,7 @@ export function processUpdateQueue<State>(
         );
         const callback = update.callback;
         if (callback !== null) {
-          workInProgress.effectTag |= Callback;
+          workInProgress.flags |= Callback;
           const effects = queue.effects;
           if (effects === null) {
             queue.effects = [update];
@@ -583,8 +561,8 @@ export function processUpdateQueue<State>(
     // dealt with the props. Context in components that specify
     // shouldComponentUpdate is tricky; but we'll have to account for
     // that regardless.
-    markUnprocessedUpdateTime(newExpirationTime);
-    workInProgress.expirationTime_opaque = newExpirationTime;
+    markSkippedUpdateLanes(newLanes);
+    workInProgress.lanes = newLanes;
     workInProgress.memoizedState = newState;
   }
 

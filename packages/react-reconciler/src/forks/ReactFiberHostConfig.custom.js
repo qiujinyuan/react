@@ -51,8 +51,6 @@ export const appendInitialChild = $$$hostConfig.appendInitialChild;
 export const finalizeInitialChildren = $$$hostConfig.finalizeInitialChildren;
 export const prepareUpdate = $$$hostConfig.prepareUpdate;
 export const shouldSetTextContent = $$$hostConfig.shouldSetTextContent;
-export const shouldDeprioritizeSubtree =
-  $$$hostConfig.shouldDeprioritizeSubtree;
 export const createTextInstance = $$$hostConfig.createTextInstance;
 export const scheduleTimeout = $$$hostConfig.scheduleTimeout;
 export const cancelTimeout = $$$hostConfig.cancelTimeout;
@@ -63,10 +61,6 @@ export const warnsIfNotActing = $$$hostConfig.warnsIfNotActing;
 export const supportsMutation = $$$hostConfig.supportsMutation;
 export const supportsPersistence = $$$hostConfig.supportsPersistence;
 export const supportsHydration = $$$hostConfig.supportsHydration;
-export const DEPRECATED_mountResponderInstance =
-  $$$hostConfig.DEPRECATED_mountResponderInstance;
-export const DEPRECATED_unmountResponderInstance =
-  $$$hostConfig.DEPRECATED_unmountResponderInstance;
 export const getFundamentalComponentInstance =
   $$$hostConfig.getFundamentalComponentInstance;
 export const mountFundamentalComponent =
@@ -74,16 +68,30 @@ export const mountFundamentalComponent =
 export const shouldUpdateFundamentalComponent =
   $$$hostConfig.shouldUpdateFundamentalComponent;
 export const getInstanceFromNode = $$$hostConfig.getInstanceFromNode;
-export const beforeRemoveInstance = $$$hostConfig.beforeRemoveInstance;
 export const isOpaqueHydratingObject = $$$hostConfig.isOpaqueHydratingObject;
 export const makeOpaqueHydratingObject =
   $$$hostConfig.makeOpaqueHydratingObject;
 export const makeClientId = $$$hostConfig.makeClientId;
 export const makeClientIdInDEV = $$$hostConfig.makeClientIdInDEV;
-export const makeServerId = $$$hostConfig.makeServerId;
 export const beforeActiveInstanceBlur = $$$hostConfig.beforeActiveInstanceBlur;
 export const afterActiveInstanceBlur = $$$hostConfig.afterActiveInstanceBlur;
 export const preparePortalMount = $$$hostConfig.preparePortalMount;
+export const prepareScopeUpdate = $$$hostConfig.preparePortalMount;
+export const getInstanceFromScope = $$$hostConfig.getInstanceFromScope;
+
+// -------------------
+//      Test selectors
+//     (optional)
+// -------------------
+export const supportsTestSelectors = $$$hostConfig.supportsTestSelectors;
+export const findFiberRoot = $$$hostConfig.findFiberRoot;
+export const getBoundingRect = $$$hostConfig.getBoundingRect;
+export const getTextContent = $$$hostConfig.getTextContent;
+export const isHiddenSubtree = $$$hostConfig.isHiddenSubtree;
+export const matchAccessibilityRole = $$$hostConfig.matchAccessibilityRole;
+export const setFocusIfFocusable = $$$hostConfig.setFocusIfFocusable;
+export const setupIntersectionObserver =
+  $$$hostConfig.setupIntersectionObserver;
 
 // -------------------
 //      Mutation

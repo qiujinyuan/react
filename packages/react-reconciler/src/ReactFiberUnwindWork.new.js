@@ -8,7 +8,7 @@
  */
 
 import type {Fiber} from './ReactInternalTypes';
-import type {ExpirationTimeOpaque} from './ReactFiberExpirationTime.new';
+import type {Lanes} from './ReactFiberLane';
 import type {SuspenseState} from './ReactFiberSuspenseComponent.new';
 
 import {resetWorkInProgressVersions as resetMutableSourceWorkInProgressVersions} from './ReactMutableSource.new';
@@ -23,8 +23,12 @@ import {
   OffscreenComponent,
   LegacyHiddenComponent,
 } from './ReactWorkTags';
-import {DidCapture, NoEffect, ShouldCapture} from './ReactSideEffectTags';
-import {enableSuspenseServerRenderer} from 'shared/ReactFeatureFlags';
+import {DidCapture, NoFlags, ShouldCapture} from './ReactFiberFlags';
+import {NoMode, ProfileMode} from './ReactTypeOfMode';
+import {
+  enableSuspenseServerRenderer,
+  enableProfilerTimer,
+} from 'shared/ReactFeatureFlags';
 
 import {popHostContainer, popHostContext} from './ReactFiberHostContext.new';
 import {popSuspenseContext} from './ReactFiberSuspenseContext.new';
@@ -35,23 +39,27 @@ import {
   popTopLevelContextObject as popTopLevelLegacyContextObject,
 } from './ReactFiberContext.new';
 import {popProvider} from './ReactFiberNewContext.new';
-import {popRenderExpirationTime} from './ReactFiberWorkLoop.new';
+import {popRenderLanes} from './ReactFiberWorkLoop.new';
+import {transferActualDuration} from './ReactProfilerTimer.new';
 
 import invariant from 'shared/invariant';
 
-function unwindWork(
-  workInProgress: Fiber,
-  renderExpirationTime: ExpirationTimeOpaque,
-) {
+function unwindWork(workInProgress: Fiber, renderLanes: Lanes) {
   switch (workInProgress.tag) {
     case ClassComponent: {
       const Component = workInProgress.type;
       if (isLegacyContextProvider(Component)) {
         popLegacyContext(workInProgress);
       }
-      const effectTag = workInProgress.effectTag;
-      if (effectTag & ShouldCapture) {
-        workInProgress.effectTag = (effectTag & ~ShouldCapture) | DidCapture;
+      const flags = workInProgress.flags;
+      if (flags & ShouldCapture) {
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+        if (
+          enableProfilerTimer &&
+          (workInProgress.mode & ProfileMode) !== NoMode
+        ) {
+          transferActualDuration(workInProgress);
+        }
         return workInProgress;
       }
       return null;
@@ -60,13 +68,13 @@ function unwindWork(
       popHostContainer(workInProgress);
       popTopLevelLegacyContextObject(workInProgress);
       resetMutableSourceWorkInProgressVersions();
-      const effectTag = workInProgress.effectTag;
+      const flags = workInProgress.flags;
       invariant(
-        (effectTag & DidCapture) === NoEffect,
+        (flags & DidCapture) === NoFlags,
         'The root failed to unmount after an error. This is likely a bug in ' +
           'React. Please file an issue.',
       );
-      workInProgress.effectTag = (effectTag & ~ShouldCapture) | DidCapture;
+      workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
       return workInProgress;
     }
     case HostComponent: {
@@ -88,10 +96,16 @@ function unwindWork(
           resetHydrationState();
         }
       }
-      const effectTag = workInProgress.effectTag;
-      if (effectTag & ShouldCapture) {
-        workInProgress.effectTag = (effectTag & ~ShouldCapture) | DidCapture;
+      const flags = workInProgress.flags;
+      if (flags & ShouldCapture) {
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
         // Captured a suspense effect. Re-render the boundary.
+        if (
+          enableProfilerTimer &&
+          (workInProgress.mode & ProfileMode) !== NoMode
+        ) {
+          transferActualDuration(workInProgress);
+        }
         return workInProgress;
       }
       return null;
@@ -110,7 +124,7 @@ function unwindWork(
       return null;
     case OffscreenComponent:
     case LegacyHiddenComponent:
-      popRenderExpirationTime(workInProgress);
+      popRenderLanes(workInProgress);
       return null;
     default:
       return null;
@@ -150,7 +164,7 @@ function unwindInterruptedWork(interruptedWork: Fiber) {
       break;
     case OffscreenComponent:
     case LegacyHiddenComponent:
-      popRenderExpirationTime(interruptedWork);
+      popRenderLanes(interruptedWork);
       break;
     default:
       break;
