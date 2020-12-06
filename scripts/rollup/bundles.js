@@ -135,15 +135,6 @@ const bundles = [
     externals: ['react'],
   },
 
-  /******* React Cache (experimental, new) *******/
-  {
-    bundleTypes: __EXPERIMENTAL__ ? [NODE_DEV, NODE_PROD, NODE_PROFILING] : [],
-    moduleType: ISOMORPHIC,
-    entry: 'react/unstable-cache',
-    global: 'ReactCache',
-    externals: ['react'],
-  },
-
   /******* React Fetch Browser (experimental, new) *******/
   {
     bundleTypes: [NODE_DEV, NODE_PROD],
@@ -160,6 +151,24 @@ const bundles = [
     entry: 'react-fetch/index.node',
     global: 'ReactFetch',
     externals: ['react', 'http', 'https'],
+  },
+
+  /******* React PG Browser (experimental, new) *******/
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: ISOMORPHIC,
+    entry: 'react-pg/index.browser',
+    global: 'ReactPostgres',
+    externals: [],
+  },
+
+  /******* React PG Node (experimental, new) *******/
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: ISOMORPHIC,
+    entry: 'react-pg/index.node',
+    global: 'ReactPostgres',
+    externals: ['react', 'pg'],
   },
 
   /******* React DOM *******/
@@ -292,7 +301,7 @@ const bundles = [
     moduleType: RENDERER_UTILS,
     entry: 'react-transport-dom-webpack/plugin',
     global: 'ReactFlightWebpackPlugin',
-    externals: [],
+    externals: ['fs', 'path', 'url'],
   },
 
   /******* React Transport DOM Webpack Node.js Loader *******/
@@ -301,7 +310,7 @@ const bundles = [
     moduleType: RENDERER_UTILS,
     entry: 'react-transport-dom-webpack/node-loader',
     global: 'ReactFlightWebpackNodeLoader',
-    externals: [],
+    externals: ['acorn'],
   },
 
   /******* React Transport DOM Webpack Node.js CommonJS Loader *******/
@@ -310,7 +319,7 @@ const bundles = [
     moduleType: RENDERER_UTILS,
     entry: 'react-transport-dom-webpack/node-register',
     global: 'ReactFlightWebpackNodeRegister',
-    externals: ['url'],
+    externals: ['url', 'module'],
   },
 
   /******* React Transport DOM Server Relay *******/
@@ -364,6 +373,15 @@ const bundles = [
       'ReactFlightNativeRelayClientIntegration',
       'JSResourceReferenceImpl',
     ],
+  },
+
+  /******* React Suspense Test Utils *******/
+  {
+    bundleTypes: [NODE_ES2015],
+    moduleType: RENDERER_UTILS,
+    entry: 'react-suspense-test-utils',
+    global: 'ReactSuspenseTestUtils',
+    externals: ['react'],
   },
 
   /******* React ART *******/

@@ -6,4 +6,7 @@
  *
  * @flow
  */
-export {createCache, readCache, CacheProvider} from './src/cache/ReactCache';
+
+throw new Error(
+  'This entry point is not yet supported in the browser environment',
+);
